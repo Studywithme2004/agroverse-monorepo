@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>AgroVerse — Farmer</title>
+    <link rel="stylesheet" href="style.css" />
+ <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+
+</head>
+
+<body >
+  <div class="bg-farmer"> 
+  <div class="topbar">
+        <div class="logo">AgroVerse</div>
+        <nav class="nav"><a href="farmer-dashboard.html" class="active">Dashboard</a><a href="#" id="logout">Logout</a>
+        </nav>
+    </div>
+    
+     <div class="carousel-container">
+    <div class="carousel">
+      <div class="slide active">
+        <img src="https://smartfarmer.great-site.net/data/tea.jpg?auto=format&fit=crop&w=1200&q=60" alt="Slide 1">
+      </div>
+      <div class="slide">
+        <img src="https://smartfarmer.great-site.net/data/Olives.jpg?auto=format&fit=crop&w=1200&q=60" alt="Slide 2">
+      </div>
+      <div class="slide">
+        <img src="https://smartfarmer.great-site.net/data/cabbage.jpg?auto=format&fit=crop&w=1200&q=60" alt="Slide 3">
+      </div>
+      <div class="slide">
+        <img src="https://smartfarmer.great-site.net/data/wheat-1.jpg?auto=format&fit=crop&w=1200&q=60" alt="Slide 4">
+      </div>
+       <div class="slide">
+        <img src="https://smartfarmer.great-site.net/data/Rice.jpg?auto=format&fit=crop&w=1200&q=60" alt="Slide 4">
+      </div>
+       <div class="slide">
+        <img src="https://smartfarmer.great-site.net/data/maize.webp?auto=format&fit=crop&w=1200&q=60" alt="Slide 4">
+      </div>
+       <div class="slide">
+        <img src="https://smartfarmer.great-site.net/data/tomato-2643774_1280.jpg.webp?auto=format&fit=crop&w=1200&q=60" alt="Slide 4">
+      </div>
+       <div class="slide">
+        <img src="https://smartfarmer.great-site.net/data/pngtree-an-image-of-a-potato-plant-of-a-garden-with-a-picture-image_12931395.jpg?auto=format&fit=crop&w=1200&q=60">
+      </div>
+       <div class="slide">
+        <img src="https://smartfarmer.great-site.net/data/soybean?auto=format&fit=crop&w=1200&q=60" alt="Slide 4">
+      </div>
+       <div class="slide">
+        <img src="https://smartfarmer.great-site.net/data/cotton.jpg?auto=format&fit=crop&w=1200&q=60" alt="Slide 4">
+      </div>
+       <div class="slide">
+        <img src="https://smartfarmer.great-site.net/data/sugarcane.jpg?auto=format&fit=crop&w=1200&q=60" alt="Slide 4">
+      </div>
+    </div>
+
+    <div class="nav prev">&#10094;</div>
+    <div class="nav next">&#10095;</div>
+    <div class="dots"></div>
+  </div>
+    <main class="container">
+        <section class="grid" id="cropGrid"></section>
+       
+
+       
+    </main>
+
+
+    <!-- AI Chat Button -->
+<div id="ai-chat-button">💬 AI Chat</div>
+
+<!-- AI Chat Panel -->
+<div id="ai-chat-panel">
+  <div id="ai-chat-header">
+    <span>Agro AI Assistant</span>
+    <button id="ai-chat-close">&times;</button>
+  </div>
+  <div id="ai-chat-messages"></div>
+  <input type="text" id="ai-chat-input" placeholder="Type your message..." />
+  <button id="ai-chat-send">Send</button>
+</div>
+  </div> 
+
+
+  <div>
+  <h3>Plant Sensor Data</h3>
+  <p id="temperature"></p>
+  <p id="humidity"></p>
+  <p id="soil_moisture"></p>
+  <p id="sunlight"></p>
+
+  <h3>AI Crop Report</h3>
+  <pre id="ai_report"></pre>
+</div>
+
+<script>
+async function updateDashboard() {
+    const res = await fetch("http://127.0.0.1:8000/api/analyze-crop", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ plant: "Tomato" })
+    });
+    const data = await res.json();
+
+    document.getElementById("temperature").innerText = "Temperature: " + data.sensor_data.temperature + " °C";
+    document.getElementById("humidity").innerText = "Humidity: " + data.sensor_data.humidity + " %";
+    document.getElementById("soil_moisture").innerText = "Soil Moisture: " + data.sensor_data.soil_moisture;
+    document.getElementById("sunlight").innerText = "Sunlight: " + data.sensor_data.sunlight + " lux";
+
+    document.getElementById("ai_report").innerText = data.analysis;
+}
+
+// Update every 10 seconds
+setInterval(updateDashboard, 10000);
+updateDashboard();
+</script>
+
+    <script src="ai.js"></script>
+    <script src="ai-chat.js"></script>
+    
+   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <script src="frontend/slider.js"></script> 
+
+  
+<script src="crops.js"></script>
+<script src="script1.js"></script>
+</body>
+
+
+</html>

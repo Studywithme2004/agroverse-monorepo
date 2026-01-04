@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Login — AgroVerse</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body class="auth-page">
+    <div class="bg" style="background-image:url('assets/leaf-back.png')"></div>
+    <main class="auth-card">
+        <h2>Login</h2>
+        <form id="loginForm"><label>Username<input id="email" type="email"
+                    required /></label>
+                    <br>
+                    <br>
+                    <label>Password<input id="password" type="password" required /></label>
+                    <br>
+                    <br>
+                    <label
+                class="row"><input id="remember" type="checkbox" /> Remember me</label>
+                <br>
+            <div class="row auth-actions"><button class="btn primary" type="submit">Login</button><a class="btn ghost"
+                    href="index.html">Cancel</a></div>
+            <p class="muted small">Demo: farmer@example.com / 12345 • admin@example.com / admin123</p>
+        </form>
+    </main>
+    <script src="script.js"></script>
+    <script type="module" src="script.js"></script>
+</body>
+
+</html>

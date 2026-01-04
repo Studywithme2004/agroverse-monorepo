@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Crop Report</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+
+<body>
+    <div class="topbar">
+        <div class="logo">AgroVerse</div>
+        <nav class="nav">
+            <a href="farmer-dashboard.html">Dashboard</a>
+            <a href="admin-dashboard.html">Admin</a>
+        </nav>
+    </div>
+
+    <main class="container report-page">
+        <section class="report card">
+            <div id="reportHeader">
+                <h2 id="cropName">Loading Crop Report...</h2>
+                <p id="cropHealth"></p>
+                <p id="cropSuggestion"></p>
+            </div>
+
+            <div class="charts">
+                <canvas id="chart1" height="150"></canvas>
+                <canvas id="chart2" height="150" class="mt-3"></canvas>
+            </div>
+
+            <div class="row">
+                <button id="downloadPdf" class="btn primary">Download PDF</button>
+            </div>
+        </section>
+
+        <!-- AI Chat Button -->
+        <div id="ai-chat-button">💬 AI Chat</div>
+
+        <!-- AI Chat Panel -->
+        <div id="ai-chat-panel">
+            <div id="ai-chat-header">
+                <span>Agro AI Assistant</span>
+                <button id="ai-chat-close">&times;</button>
+            </div>
+            <div id="ai-chat-messages"></div>
+            <input type="text" id="ai-chat-input" placeholder="Type your message..." />
+            <button id="ai-chat-send">Send</button>
+        </div>
+
+    </main>
+
+    <script>
+        let sensorData = {};
+        let aiAnalysis = {};
+
+        async function loadReport() {
+            try {
+                // 1️⃣ Fetch simulated crop analysis from backend
+                const res = await fetch("http://127.0.0.1:8000/api/analyze-crop", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ plant: "Tomato" }) // change plant dynamically if needed
+                });
+                const data = await res.json();
+                sensorData = data.sensor_data;
+                aiAnalysis = data.analysis;
+
+                // 2️⃣ Update report header
+                document.getElementById("cropName").innerText = "Tomato Crop Report";
+                document.getElementById("cropHealth").innerText = `Sensor Data: Temp ${sensorData.temperature}°C, Humidity ${sensorData.humidity}%, Soil Moisture ${sensorData.soil_moisture}, Sunlight ${sensorData.sunlight} lux`;
+                document.getElementById("cropSuggestion").innerText = `AI Analysis: ${aiAnalysis}`;
+
+                // 3️⃣ Draw charts
+                drawCharts();
+
+            } catch (err) {
+                console.error("Error loading report:", err);
+                document.getElementById("cropName").innerText = "Failed to load report.";
+            }
+        }
+
+        function drawCharts() {
+            // Temperature & Humidity Chart
+            new Chart(document.getElementById("chart1"), {
+                type: 'bar',
+                data: {
+                    labels: ["Temperature (°C)", "Humidity (%)", "Soil Moisture", "Sunlight (lux)"],
+                    datasets: [{
+                        label: "Sensor Values",
+                        data: [sensorData.temperature, sensorData.humidity, sensorData.soil_moisture, sensorData.sunlight],
+                        backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0"]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+
+            // Simple Pie: AI Suggestions Keywords (example)
+            const suggestionKeywords = aiAnalysis.split(" ").slice(0, 5); // top 5 words for demo
+            const suggestionValues = suggestionKeywords.map(() => Math.floor(Math.random() * 10) + 1);
+            new Chart(document.getElementById("chart2"), {
+                type: 'pie',
+                data: {
+                    labels: suggestionKeywords,
+                    datasets: [{
+                        data: suggestionValues,
+                        backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"]
+                    }]
+                },
+                options: { responsive: true }
+            });
+        }
+
+        // PDF Download
+        document.getElementById("downloadPdf").addEventListener("click", () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text("AgroVerse Crop Report", 10, 10);
+            doc.text(`Plant: Tomato`, 10, 20);
+            doc.text(`Temperature: ${sensorData.temperature}°C`, 10, 30);
+            doc.text(`Humidity: ${sensorData.humidity}%`, 10, 40);
+            doc.text(`Soil Moisture: ${sensorData.soil_moisture}`, 10, 50);
+            doc.text(`Sunlight: ${sensorData.sunlight} lux`, 10, 60);
+            doc.text(`AI Analysis: ${aiAnalysis}`, 10, 70, { maxWidth: 180 });
+            doc.save("crop_report.pdf");
+        });
+
+        // Load report on page load
+        loadReport();
+    </script>
+
+    <script src="ai-chat.js"></script>
+</body>
+</html>
