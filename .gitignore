@@ -1,0 +1,9 @@
+# Ignore Firebase secrets and environment variables
+backend/firebase-key.json
+Agroverse_FastAPI_Backend/backend/firebase-key.json
+backend/.env
+
+# Python cache files
+__pycache__/
+*.pyc
+
