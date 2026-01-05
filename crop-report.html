@@ -14,8 +14,8 @@
     <div class="topbar">
         <div class="logo">AgroVerse</div>
         <nav class="nav">
-            <a href="farmer-dashboard.html">Dashboard</a>
-            <a href="admin-dashboard.html">Admin</a>
+            <a href='/farmer-dashboard'>Dashboard</a>
+            <a href='/admin-dashboard'>Admin</a>
         </nav>
     </div>
 
@@ -54,85 +54,99 @@
     </main>
 
     <script>
+        const API_BASE = "https://agroverse-monorepo.onrender.com";
         let sensorData = {};
-        let aiAnalysis = {};
+        let aiAnalysis = "";
+
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param) || "Tomato";
+        }
 
         async function loadReport() {
+            const plant = getQueryParam("crop");
+
             try {
-                // 1️⃣ Fetch simulated crop analysis from backend
-                const res = await fetch("https://agroverse-monorepo.onrender.com/api/analyze-crop", {
+                const res = await fetch(`${API_BASE}/api/analyze-crop`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ plant: "Tomato" }) // change plant dynamically if needed
+                    body: JSON.stringify({ plant })
                 });
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
                 const data = await res.json();
+
+                if (!data.sensor_data || !data.analysis) {
+                    throw new Error("Incomplete data from backend");
+                }
+
                 sensorData = data.sensor_data;
                 aiAnalysis = data.analysis;
 
-                // 2️⃣ Update report header
-                document.getElementById("cropName").innerText = "Tomato Crop Report";
-                document.getElementById("cropHealth").innerText = `Sensor Data: Temp ${sensorData.temperature}°C, Humidity ${sensorData.humidity}%, Soil Moisture ${sensorData.soil_moisture}, Sunlight ${sensorData.sunlight} lux`;
+                // Update report header
+                document.getElementById("cropName").innerText = `${plant} Crop Report`;
+                document.getElementById("cropHealth").innerText =
+                    `Sensor Data: Temp ${sensorData.temperature}°C, Humidity ${sensorData.humidity}%, ` +
+                    `Soil Moisture ${sensorData.soil_moisture}, Sunlight ${sensorData.sunlight} lux`;
                 document.getElementById("cropSuggestion").innerText = `AI Analysis: ${aiAnalysis}`;
 
-                // 3️⃣ Draw charts
                 drawCharts();
 
             } catch (err) {
                 console.error("Error loading report:", err);
                 document.getElementById("cropName").innerText = "Failed to load report.";
+                document.getElementById("cropHealth").innerText = "";
+                document.getElementById("cropSuggestion").innerText = "";
             }
         }
 
         function drawCharts() {
-            // Temperature & Humidity Chart
+            if (!sensorData || !Object.keys(sensorData).length) return;
+
+            // Chart 1
             new Chart(document.getElementById("chart1"), {
                 type: 'bar',
                 data: {
                     labels: ["Temperature (°C)", "Humidity (%)", "Soil Moisture", "Sunlight (lux)"],
                     datasets: [{
                         label: "Sensor Values",
-                        data: [sensorData.temperature, sensorData.humidity, sensorData.soil_moisture, sensorData.sunlight],
+                        data: [
+                            sensorData.temperature || 0,
+                            sensorData.humidity || 0,
+                            sensorData.soil_moisture || 0,
+                            sensorData.sunlight || 0
+                        ],
                         backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0"]
                     }]
                 },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true } }
-                }
+                options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
             });
 
-            // Simple Pie: AI Suggestions Keywords (example)
-            const suggestionKeywords = aiAnalysis.split(" ").slice(0, 5); // top 5 words for demo
-            const suggestionValues = suggestionKeywords.map(() => Math.floor(Math.random() * 10) + 1);
+            // Chart 2
+            const keywords = aiAnalysis ? aiAnalysis.split(" ").slice(0, 5) : ["No", "Data"];
+            const values = keywords.map(() => Math.floor(Math.random() * 10) + 1);
             new Chart(document.getElementById("chart2"), {
                 type: 'pie',
-                data: {
-                    labels: suggestionKeywords,
-                    datasets: [{
-                        data: suggestionValues,
-                        backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"]
-                    }]
-                },
+                data: { labels: keywords, datasets: [{ data: values, backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF"] }] },
                 options: { responsive: true }
             });
         }
 
-        // PDF Download
         document.getElementById("downloadPdf").addEventListener("click", () => {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             doc.text("AgroVerse Crop Report", 10, 10);
-            doc.text(`Plant: Tomato`, 10, 20);
-            doc.text(`Temperature: ${sensorData.temperature}°C`, 10, 30);
-            doc.text(`Humidity: ${sensorData.humidity}%`, 10, 40);
-            doc.text(`Soil Moisture: ${sensorData.soil_moisture}`, 10, 50);
-            doc.text(`Sunlight: ${sensorData.sunlight} lux`, 10, 60);
-            doc.text(`AI Analysis: ${aiAnalysis}`, 10, 70, { maxWidth: 180 });
+            doc.text(`Plant: ${getQueryParam("crop")}`, 10, 20);
+            doc.text(`Temperature: ${sensorData.temperature || "-" }°C`, 10, 30);
+            doc.text(`Humidity: ${sensorData.humidity || "-"}%`, 10, 40);
+            doc.text(`Soil Moisture: ${sensorData.soil_moisture || "-"}`, 10, 50);
+            doc.text(`Sunlight: ${sensorData.sunlight || "-" } lux`, 10, 60);
+            doc.text(`AI Analysis: ${aiAnalysis || "N/A"}`, 10, 70, { maxWidth: 180 });
             doc.save("crop_report.pdf");
         });
 
-        // Load report on page load
+        // Load report
         loadReport();
     </script>
 
