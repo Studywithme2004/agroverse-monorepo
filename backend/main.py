@@ -7,15 +7,14 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
 
+# ---------- Load ENV ----------
 load_dotenv()
-
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
 FIREBASE_KEY_JSON = os.getenv("FIREBASE_KEY_JSON")
 
 # ---------- FastAPI ----------
 app = FastAPI(title="Agroverse AI Backend")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,13 +22,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- OpenAI ----------
+# ---------- OpenAI Client ----------
 client = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=OPENAI_BASE_URL
 )
 
-# ---------- Firebase ----------
+# ---------- Firebase Setup ----------
 firebase_enabled = False
 db = None
 
@@ -41,22 +40,20 @@ try:
     if not firebase_admin._apps:
         firebase_admin.initialize_app(
             cred,
-            {
-                "databaseURL":
-                "https://agro-98c7b-default-rtdb.firebaseio.com/"
-            }
+            {"databaseURL": "https://agro-98c7b-default-rtdb.firebaseio.com/"}
         )
-
     db = firebase_db
     firebase_enabled = True
     print("✅ Firebase initialized")
-
 except Exception as e:
     print("⚠️ Firebase disabled:", e)
 
 # ---------- Models ----------
 class ChatRequest(BaseModel):
     message: str
+
+class CropRequest(BaseModel):
+    plant: str = "Tomato"
 
 # ---------- Utils ----------
 def simulate_sensor_data():
@@ -72,45 +69,62 @@ def simulate_sensor_data():
 def root():
     return {"status": "Agroverse backend running 🚀"}
 
+# ---- AI Chat ----
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
     sensor = simulate_sensor_data()
-
     response = client.responses.create(
         model="gpt-4o-mini",
         input=f"""
 Sensor Data:
-Temperature: {sensor['temperature']}
-Humidity: {sensor['humidity']}
+Temperature: {sensor['temperature']} °C
+Humidity: {sensor['humidity']} %
 Soil Moisture: {sensor['soil_moisture']}
-Sunlight: {sensor['sunlight']}
+Sunlight: {sensor['sunlight']} lux
 
 User: {req.message}
 """
     )
+    return {"reply": response.output_text, "sensor_data": sensor}
 
-    return {
-        "reply": response.output_text,
-        "sensor_data": sensor
-    }
+# ---- Crop Analysis (for frontend) ----
+@app.post("/api/analyze-crop")
+async def analyze_crop(req: CropRequest):
+    sensor = simulate_sensor_data()
+    prompt = f"""
+Analyze the crop '{req.plant}' using this sensor data:
 
+Temperature: {sensor['temperature']} °C
+Humidity: {sensor['humidity']} %
+Soil Moisture: {sensor['soil_moisture']}
+Sunlight: {sensor['sunlight']} lux
+
+Provide:
+1. Crop health report
+2. Possible diseases
+3. Improvement suggestions
+"""
+    response = client.responses.create(
+        model="gpt-4o-mini",
+        input=prompt
+    )
+    return {"sensor_data": sensor, "analysis": response.output_text}
+
+# ---- ESP32 Sensor Update ----
 @app.post("/api/update-sensor")
 async def update_sensor(request: Request):
     data = await request.json()
-
     if not firebase_enabled:
         return {"status": "firebase_disabled", "data": data}
-
     ref = db.reference("users/testUser/sensorData")
     ref.set(data)
-
     return {"status": "stored", "data": data}
 
+# ---- Test Firebase ----
 @app.get("/test-firebase")
 def test_firebase():
     if not firebase_enabled:
         return {"error": "Firebase not enabled"}
-
     ref = db.reference("users/testUser/sensorData")
     return ref.get() or {"message": "No data found"}
 
