@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# ---------- Load ENV ----------
+# ================= LOAD ENV =================
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -17,13 +17,13 @@ FIREBASE_KEY_JSON = os.getenv("FIREBASE_KEY_JSON")
 if not OPENAI_API_KEY:
     raise RuntimeError("❌ OPENAI_API_KEY not set")
 
-# ---------- OpenAI Client ----------
+# ================= OPENAI =================
 client = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=OPENAI_BASE_URL
 )
 
-# ---------- FastAPI ----------
+# ================= FASTAPI =================
 app = FastAPI(title="Agroverse AI Backend")
 
 app.add_middleware(
@@ -34,29 +34,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------- Request Models ----------
+# ================= MODELS =================
 class ChatRequest(BaseModel):
     message: str
-    history: list = []
 
-class CropRequest(BaseModel):
-    plant: str = "Tomato"
-
-# ---------- Simulated Sensor Data ----------
+# ================= SENSOR SIM =================
 def simulate_sensor_data():
     return {
         "temperature": round(random.uniform(20, 35), 1),
         "humidity": round(random.uniform(40, 80), 1),
         "soil_moisture": random.randint(300, 800),
-        "sunlight": random.randint(100, 1000)
+        "sunlight": random.randint(100, 1000),
     }
 
-# ---------- Root ----------
+# ================= ROOT =================
 @app.get("/")
 def root():
-    return {"status": "Agroverse FastAPI running 🚀"}
+    return {"status": "Agroverse backend running 🚀"}
 
-# ---------- AI Chat ----------
+# ================= AI CHAT =================
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     sensor = simulate_sensor_data()
@@ -80,78 +76,58 @@ async def chat(request: ChatRequest):
         input=messages
     )
 
-    return {"reply": response.output_text, "sensor_data": sensor}
+    return {
+        "reply": response.output_text,
+        "sensor_data": sensor
+    }
 
-# ---------- Crop Analysis ----------
-@app.post("/api/analyze-crop")
-async def analyze_crop(request: CropRequest):
-    sensor = simulate_sensor_data()
-
-    prompt = f"""
-Analyze crop: {request.plant}
-
-Temperature: {sensor['temperature']} °C
-Humidity: {sensor['humidity']} %
-Soil Moisture: {sensor['soil_moisture']}
-Sunlight: {sensor['sunlight']} lux
-
-Give:
-1. Health report
-2. Possible diseases
-3. Improvement suggestions
-"""
-
-    response = client.responses.create(
-        model="gpt-4o-mini",
-        input=prompt
-    )
-
-    return {"sensor_data": sensor, "analysis": response.output_text}
-
-# ---------- Firebase Setup ----------
+# ================= FIREBASE =================
 firebase_enabled = False
+db = None
 
 try:
     import firebase_admin
-    from firebase_admin import credentials, db
+    from firebase_admin import credentials, db as firebase_db
 
-    cred_dict = json.loads(FIREBASE_KEY_JSON)
-    cred = credentials.Certificate(cred_dict)
+    if FIREBASE_KEY_JSON:
+        cred_dict = json.loads(FIREBASE_KEY_JSON)
+        cred = credentials.Certificate(cred_dict)
 
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(
-            cred,
-            {
-                "databaseURL": "https://agro-98c7b-default-rtdb.firebaseio.com/"
-            }
-        )
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(
+                cred,
+                {"databaseURL": "https://agro-98c7b-default-rtdb.firebaseio.com/"}
+            )
 
-    firebase_enabled = True
-    print("✅ Firebase initialized")
+        db = firebase_db
+        firebase_enabled = True
+        print("✅ Firebase initialized")
 
 except Exception as e:
     print("⚠️ Firebase disabled:", e)
 
-# ---------- Receive ESP32 Sensor Data ----------
-@app.post("/api/update-sensor")
-async def update_sensor(request: Request):
+# ================= ESP32 SENSOR API =================
+@app.post("/api/sensor-data")
+async def receive_sensor_data(request: Request):
     data = await request.json()
 
-    if not firebase_enabled:
-        return {"status": "firebase_disabled", "data": data}
+    if firebase_enabled:
+        ref = db.reference("users/testUser/sensorData")
+        ref.set(data)
 
-    ref = db.reference("users/testUser/sensorData")
-    ref.set(data)
+    return {
+        "status": "received",
+        "firebase": firebase_enabled,
+        "data": data
+    }
 
-    return {"status": "success", "stored": data}
-
-# ---------- Test Firebase ----------
+# ================= TEST FIREBASE =================
 @app.get("/test-firebase")
 def test_firebase():
     if not firebase_enabled:
         return {"error": "Firebase not enabled"}
 
     ref = db.reference("users/testUser/sensorData")
-    return ref.get() or {"message": "No data found"}
+    return ref.get() or {"message": "No data yet"}
 
 print("✅ Backend fully loaded")
