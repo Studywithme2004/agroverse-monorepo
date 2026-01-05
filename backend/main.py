@@ -141,5 +141,19 @@ try:
 except Exception as e:
     print("⚠️ Firebase disabled:", e)
 
+
+from fastapi import Request
+
+@app.post("/api/update-sensor")
+async def update_sensor(request: Request):
+    try:
+        data = await request.json()
+        ref = db.reference("users/testUser/sensorData")
+        ref.set(data)  # store live data in Firebase
+        return {"status": "success", "data": data}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
 # ---------- Debug ----------
 print("✅ OpenAI loaded")
