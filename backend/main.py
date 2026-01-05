@@ -1,4 +1,5 @@
 import os
+import json
 import random
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,20 +9,26 @@ from openai import OpenAI
 
 # ---------- Load ENV ----------
 load_dotenv()
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
+FIREBASE_KEY_JSON = os.getenv("FIREBASE_KEY_JSON")
 
 if not OPENAI_API_KEY:
-    raise RuntimeError("❌ OPENAI_API_KEY not set in .env")
+    raise RuntimeError("❌ OPENAI_API_KEY not set")
 
-client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
+# ---------- OpenAI Client ----------
+client = OpenAI(
+    api_key=OPENAI_API_KEY,
+    base_url=OPENAI_BASE_URL
+)
 
 # ---------- FastAPI ----------
-app = FastAPI()
+app = FastAPI(title="Agroverse AI Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # tighten in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -37,133 +44,102 @@ class CropRequest(BaseModel):
 
 # ---------- Simulated Sensor Data ----------
 def simulate_sensor_data():
-    """Simulate live sensor data for testing/dashboard"""
     return {
-        "temperature": round(random.uniform(20, 35), 1),  # °C
-        "humidity": round(random.uniform(40, 80), 1),     # %
-        "soil_moisture": round(random.uniform(300, 800)), # arbitrary units
-        "sunlight": round(random.uniform(100, 1000))      # lux
+        "temperature": round(random.uniform(20, 35), 1),
+        "humidity": round(random.uniform(40, 80), 1),
+        "soil_moisture": round(random.uniform(300, 800)),
+        "sunlight": round(random.uniform(100, 1000))
     }
 
 # ---------- Root ----------
 @app.get("/")
 def root():
-    return {"status": "FastAPI is running"}
+    return {"status": "Agroverse FastAPI running 🚀"}
 
-# ---------- AI Chat API ----------
+# ---------- AI Chat ----------
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     sensor = simulate_sensor_data()
-    sensor_context = f"""
-Live Farm Sensor Data:
-- Temperature: {sensor['temperature']} °C
-- Humidity: {sensor['humidity']} %
-- Soil Moisture: {sensor['soil_moisture']}
-- Sunlight: {sensor['sunlight']} lux
-"""
+    sensor_context = (
+        f"Temperature: {sensor['temperature']} °C\n"
+        f"Humidity: {sensor['humidity']} %\n"
+        f"Soil Moisture: {sensor['soil_moisture']}\n"
+        f"Sunlight: {sensor['sunlight']} lux\n"
+    )
 
     messages = [
         {
             "role": "system",
             "content": (
                 "You are an expert agricultural AI assistant. "
-                "Analyze crop health using live IoT sensor data and "
-                "give clear, practical farming advice.\n"
+                "Analyze crop health using live IoT sensor data and give clear, practical farming advice.\n"
                 + sensor_context
             )
         },
-        {
-            "role": "user",
-            "content": request.message
-        }
+        {"role": "user", "content": request.message}
     ]
 
     try:
         response = client.responses.create(
-            model="openai/gpt-4o-mini",
+            model="gpt-4o-mini",
             input=messages
         )
-        reply = response.output_text
+        return {"reply": response.output_text, "sensor_data": sensor}
 
     except Exception as e:
-        print("🔥 AI ERROR:", e)
-        return {
-            "error": str(e),
-            "sensor_data": sensor
-        }
+        return {"error": str(e), "sensor_data": sensor}
 
-    return {
-        "reply": reply,
-        "sensor_data": sensor
-    }
-
-# ---------- Crop Analysis API ----------
+# ---------- Crop Analysis ----------
 @app.post("/api/analyze-crop")
 async def analyze_crop(request: CropRequest):
     sensor = simulate_sensor_data()
-    sensor_context = f"""
-Live Plant Sensor Data:
-- Temperature: {sensor['temperature']} °C
-- Humidity: {sensor['humidity']} %
-- Soil Moisture: {sensor['soil_moisture']}
-- Sunlight: {sensor['sunlight']} lux
-"""
-
-    prompt = f"""
-You are an expert agricultural AI assistant.
-Analyze the crop "{request.plant}" using the sensor data below:
-{sensor_context}
-
-Please provide:
-1. Full crop report
-2. Possible diseases
-3. Clear suggestions for improving crop health
-"""
+    prompt = (
+        f"Analyze the crop '{request.plant}' using sensor data:\n"
+        f"Temperature: {sensor['temperature']} °C\n"
+        f"Humidity: {sensor['humidity']} %\n"
+        f"Soil Moisture: {sensor['soil_moisture']}\n"
+        f"Sunlight: {sensor['sunlight']} lux\n\n"
+        "Provide:\n"
+        "1. Crop health report\n"
+        "2. Possible diseases\n"
+        "3. Improvement suggestions"
+    )
 
     try:
         response = client.responses.create(
-            model="openai/gpt-4o-mini",
+            model="gpt-4o-mini",
             input=prompt
         )
-        reply = response.output_text
+        return {"sensor_data": sensor, "analysis": response.output_text}
 
     except Exception as e:
-        print("🔥 AI ERROR:", e)
-        return {
-            "error": str(e),
-            "sensor_data": sensor
-        }
+        return {"error": str(e), "sensor_data": sensor}
 
-    return {
-        "sensor_data": sensor,
-        "analysis": reply
-    }
-
-# ---------- Firebase Test ----------
+# ---------- Firebase ----------
 try:
     import firebase_admin
     from firebase_admin import credentials, db
 
-    # 🔴 Make sure this file exists
-    cred = credentials.Certificate("firebase-key.json")
-    firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://agroverseai-default-rtdb.firebaseio.com/"
-    })
+    if not FIREBASE_KEY_JSON:
+        raise RuntimeError("❌ FIREBASE_KEY_JSON not set")
+
+    cred_dict = json.loads(FIREBASE_KEY_JSON)
+    cred = credentials.Certificate(cred_dict)
+
+    firebase_admin.initialize_app(
+        cred,
+        {"databaseURL": "https://agro-98c7b-default-rtdb.firebaseio.com/"}
+    )
 
     @app.get("/test-firebase")
     def test_firebase():
-        try:
-            ref = db.reference("users/testUser/sensorData")
-            data = ref.get()
-            print("Firebase data:", data)
-            return data or {"message": "No data yet"}
-        except Exception as e:
-            print("Firebase error:", e)
-            return {"error": str(e)}
+        ref = db.reference("users/testUser/sensorData")
+        return ref.get() or {"message": "No data found"}
 
-except ModuleNotFoundError:
-    print("⚠️ Firebase not installed. Skipping Firebase endpoints.")
+    print("✅ Firebase initialized")
+
+except Exception as e:
+    print("⚠️ Firebase disabled:", e)
 
 # ---------- Debug ----------
-print("✅ OpenAI Key Loaded:", OPENAI_API_KEY[:8], "...")
-print("✅ OpenAI Base URL:", OPENAI_BASE_URL)
+print("✅ OpenAI loaded")
