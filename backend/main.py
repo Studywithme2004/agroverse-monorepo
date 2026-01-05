@@ -1,13 +1,13 @@
 import os
 import json
 import random
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# ================= LOAD ENV =================
+# ---------- Load ENV ----------
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -17,13 +17,13 @@ FIREBASE_KEY_JSON = os.getenv("FIREBASE_KEY_JSON")
 if not OPENAI_API_KEY:
     raise RuntimeError("❌ OPENAI_API_KEY not set")
 
-# ================= OPENAI =================
+# ---------- OpenAI Client ----------
 client = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=OPENAI_BASE_URL
 )
 
-# ================= FASTAPI =================
+# ---------- FastAPI ----------
 app = FastAPI(title="Agroverse AI Backend")
 
 app.add_middleware(
@@ -34,41 +34,81 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ================= MODELS =================
+# ---------- Models ----------
 class ChatRequest(BaseModel):
     message: str
 
-# ================= SENSOR SIM =================
-def simulate_sensor_data():
-    return {
-        "temperature": round(random.uniform(20, 35), 1),
-        "humidity": round(random.uniform(40, 80), 1),
-        "soil_moisture": random.randint(300, 800),
-        "sunlight": random.randint(100, 1000),
-    }
+class SensorData(BaseModel):
+    crop: str
+    temperature: float
+    humidity: float
+    soil_moisture: int
+    sunlight: int
 
-# ================= ROOT =================
+# ---------- Firebase ----------
+firebase_enabled = False
+
+try:
+    import firebase_admin
+    from firebase_admin import credentials, db
+
+    cred = credentials.Certificate(json.loads(FIREBASE_KEY_JSON))
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(
+            cred,
+            {
+                "databaseURL": "https://agro-98c7b-default-rtdb.firebaseio.com/"
+            }
+        )
+
+    firebase_enabled = True
+    print("✅ Firebase initialized")
+
+except Exception as e:
+    print("⚠️ Firebase disabled:", e)
+
+# ---------- Root ----------
 @app.get("/")
 def root():
     return {"status": "Agroverse backend running 🚀"}
 
-# ================= AI CHAT =================
+# ---------- ESP32 SENSOR ENDPOINT (FIXED) ----------
+@app.post("/api/update-sensor")
+def update_sensor(data: SensorData):
+
+    if firebase_enabled:
+        ref = db.reference("users/testUser/sensorData")
+        ref.set(data.dict())
+
+    return {
+        "status": "success",
+        "received": data
+    }
+
+# ---------- AI CHAT ----------
 @app.post("/api/chat")
-async def chat(request: ChatRequest):
-    sensor = simulate_sensor_data()
+def chat(req: ChatRequest):
+
+    sensor = {
+        "temperature": round(random.uniform(20, 35), 1),
+        "humidity": round(random.uniform(40, 80), 1),
+        "soil_moisture": random.randint(300, 800),
+        "sunlight": random.randint(100, 1000)
+    }
 
     messages = [
         {
             "role": "system",
             "content": (
-                "You are an expert agricultural AI assistant.\n"
-                f"Temperature: {sensor['temperature']} °C\n"
-                f"Humidity: {sensor['humidity']} %\n"
+                "You are an agricultural AI assistant.\n"
+                f"Temperature: {sensor['temperature']}°C\n"
+                f"Humidity: {sensor['humidity']}%\n"
                 f"Soil Moisture: {sensor['soil_moisture']}\n"
-                f"Sunlight: {sensor['sunlight']} lux\n"
+                f"Sunlight: {sensor['sunlight']} lux"
             )
         },
-        {"role": "user", "content": request.message}
+        {"role": "user", "content": req.message}
     ]
 
     response = client.responses.create(
@@ -80,54 +120,5 @@ async def chat(request: ChatRequest):
         "reply": response.output_text,
         "sensor_data": sensor
     }
-
-# ================= FIREBASE =================
-firebase_enabled = False
-db = None
-
-try:
-    import firebase_admin
-    from firebase_admin import credentials, db as firebase_db
-
-    if FIREBASE_KEY_JSON:
-        cred_dict = json.loads(FIREBASE_KEY_JSON)
-        cred = credentials.Certificate(cred_dict)
-
-        if not firebase_admin._apps:
-            firebase_admin.initialize_app(
-                cred,
-                {"databaseURL": "https://agro-98c7b-default-rtdb.firebaseio.com/"}
-            )
-
-        db = firebase_db
-        firebase_enabled = True
-        print("✅ Firebase initialized")
-
-except Exception as e:
-    print("⚠️ Firebase disabled:", e)
-
-# ================= ESP32 SENSOR API =================
-@app.post("/api/sensor-data")
-async def receive_sensor_data(request: Request):
-    data = await request.json()
-
-    if firebase_enabled:
-        ref = db.reference("users/testUser/sensorData")
-        ref.set(data)
-
-    return {
-        "status": "received",
-        "firebase": firebase_enabled,
-        "data": data
-    }
-
-# ================= TEST FIREBASE =================
-@app.get("/test-firebase")
-def test_firebase():
-    if not firebase_enabled:
-        return {"error": "Firebase not enabled"}
-
-    ref = db.reference("users/testUser/sensorData")
-    return ref.get() or {"message": "No data yet"}
 
 print("✅ Backend fully loaded")
