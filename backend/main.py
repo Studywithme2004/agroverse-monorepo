@@ -1,7 +1,7 @@
 import os
 import json
 import random
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -36,15 +36,20 @@ try:
     import firebase_admin
     from firebase_admin import credentials, db as firebase_db
 
-    cred = credentials.Certificate(json.loads(FIREBASE_KEY_JSON))
+    cred = credentials.Certificate(
+        json.loads(FIREBASE_KEY_JSON.replace("\\n", "\n"))
+    )
+
     if not firebase_admin._apps:
         firebase_admin.initialize_app(
             cred,
             {"databaseURL": "https://agro-98c7b-default-rtdb.firebaseio.com/"}
         )
+
     db = firebase_db
     firebase_enabled = True
     print("✅ Firebase initialized")
+
 except Exception as e:
     print("⚠️ Firebase disabled:", e)
 
@@ -73,9 +78,11 @@ def root():
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
     sensor = simulate_sensor_data()
-    response = client.responses.create(
-        model="gpt-4o-mini",
-        input=f"""
+
+    try:
+        response = client.responses.create(
+            model="gpt-4o-mini",
+            input=f"""
 Sensor Data:
 Temperature: {sensor['temperature']} °C
 Humidity: {sensor['humidity']} %
@@ -84,13 +91,18 @@ Sunlight: {sensor['sunlight']} lux
 
 User: {req.message}
 """
-    )
-    return {"reply": response.output_text, "sensor_data": sensor}
+        )
+        reply = response.output_text
+    except Exception:
+        reply = "AI service temporarily unavailable"
 
-# ---- Crop Analysis (for frontend) ----
+    return {"reply": reply, "sensor_data": sensor}
+
+# ---- Crop Analysis ----
 @app.post("/api/analyze-crop")
 async def analyze_crop(req: CropRequest):
     sensor = simulate_sensor_data()
+
     prompt = f"""
 Analyze the crop '{req.plant}' using this sensor data:
 
@@ -104,20 +116,34 @@ Provide:
 2. Possible diseases
 3. Improvement suggestions
 """
-    response = client.responses.create(
-        model="gpt-4o-mini",
-        input=prompt
-    )
-    return {"sensor_data": sensor, "analysis": response.output_text}
 
-# ---- ESP32 Sensor Update ----
-@app.post("/api/update-sensor")
-async def update_sensor(request: Request):
-    data = await request.json()
+    try:
+        response = client.responses.create(
+            model="gpt-4o-mini",
+            input=prompt
+        )
+        analysis = response.output_text
+    except Exception:
+        analysis = "AI service temporarily unavailable"
+
+    return {"sensor_data": sensor, "analysis": analysis}
+
+# ---- ESP32 Sensor Update (POST + GET + HEAD) ----
+@app.api_route("/api/update-sensor", methods=["POST", "GET", "HEAD"])
+async def update_sensor(request: Request, data: dict = Body(default=None)):
+
+    if request.method in ("GET", "HEAD"):
+        return {"status": "sensor endpoint alive"}
+
+    if data is None:
+        data = await request.json()
+
     if not firebase_enabled:
         return {"status": "firebase_disabled", "data": data}
+
     ref = db.reference("users/testUser/sensorData")
     ref.set(data)
+
     return {"status": "stored", "data": data}
 
 # ---- Test Firebase ----
@@ -125,6 +151,7 @@ async def update_sensor(request: Request):
 def test_firebase():
     if not firebase_enabled:
         return {"error": "Firebase not enabled"}
+
     ref = db.reference("users/testUser/sensorData")
     return ref.get() or {"message": "No data found"}
 
