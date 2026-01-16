@@ -29,16 +29,19 @@ client = OpenAI(
 )
 
 # ---------- Firebase Setup ----------
+# ---------- Firebase Setup ----------
 firebase_enabled = False
 db = None
 
 try:
     import firebase_admin
     from firebase_admin import credentials, db as firebase_db
+    import base64
 
-    cred = credentials.Certificate(
-        json.loads(FIREBASE_KEY_JSON.replace("\\n", "\n"))
-    )
+    # Decode Base64 Firebase JSON (Render-safe)
+    firebase_json = base64.b64decode(FIREBASE_KEY_JSON).decode("utf-8")
+
+    cred = credentials.Certificate(json.loads(firebase_json))
 
     if not firebase_admin._apps:
         firebase_admin.initialize_app(
@@ -52,6 +55,7 @@ try:
 
 except Exception as e:
     print("⚠️ Firebase disabled:", e)
+
 
 # ---------- Models ----------
 class ChatRequest(BaseModel):
