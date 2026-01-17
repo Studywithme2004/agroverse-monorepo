@@ -95,7 +95,8 @@ async def chat(req: ChatRequest):
 
         response = client.responses.create(
             model="gpt-4o-mini",
-            input=f"""
+            input=f""",
+            max_output_tokens=500
 Sensor Data:
 Temperature: {sensor['temperature']} °C
 Humidity: {sensor['humidity']} %
@@ -138,7 +139,8 @@ Provide:
 
         response = client.responses.create(
             model="gpt-4o-mini",
-            input=prompt
+            input=prompt,
+            max_output_tokens=500
         )
 
         return {
