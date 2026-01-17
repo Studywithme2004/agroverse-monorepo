@@ -29,7 +29,7 @@ client = OpenAI(
 )
 
 # ---------- Firebase Setup ----------
-firebase_enabled = False
+firebase_enabled = True
 db = None
 
 try:
