@@ -1,47 +1,16 @@
-import os
 import json
 import random
-from fastapi import FastAPI, Request, Body
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from openai import OpenAI
 
-# ---------- Load ENV ----------
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
-FIREBASE_KEY_JSON = os.getenv("FIREBASE_KEY_JSON")
-
-# ---------- FastAPI ----------
-app = FastAPI(title="Agroverse AI Backend")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ---------- OpenAI Client ----------
-client = OpenAI(
-    api_key=OPENAI_API_KEY,
-    base_url=OPENAI_BASE_URL
-)
-
-# ---------- Firebase Setup ----------
-# ---------- Firebase Setup ----------
-firebase_enabled = False
-db = None
-
-try:
     import firebase_admin
     from firebase_admin import credentials, db as firebase_db
-    import base64
 
-    # Decode Base64 Firebase JSON (Render-safe)
-    firebase_json = base64.b64decode(FIREBASE_KEY_JSON).decode("utf-8")
+    cred = credentials.Certificate(json.loads(FIREBASE_KEY_JSON))
 
-    cred = credentials.Certificate(json.loads(firebase_json))
+
 
     if not firebase_admin._apps:
         firebase_admin.initialize_app(
@@ -54,55 +23,29 @@ try:
     print("✅ Firebase initialized")
 
 except Exception as e:
-    print("⚠️ Firebase disabled:", e)
-
+    print(⚠️ Firebase disabled:", e)
 
 # ---------- Models ----------
 class ChatRequest(BaseModel):
-    message: str
-
-class CropRequest(BaseModel):
-    plant: str = "Tomato"
-
-# ---------- Utils ----------
-def simulate_sensor_data():
-    return {
-        "temperature": round(random.uniform(20, 35), 1),
-        "humidity": round(random.uniform(40, 80), 1),
-        "soil_moisture": random.randint(300, 800),
-        "sunlight": random.randint(100, 1000),
-    }
-
-# ---------- Routes ----------
-@app.get("/")
-def root():
-    return {"status": "Agroverse backend running 🚀"}
-
-# ---- AI Chat ----
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
     sensor = simulate_sensor_data()
+    response = client.responses.create(
+        model="gpt-4o-mini",
+        input=f"""
 
-    try:
-        response = client.responses.create(
-            model="gpt-4o-mini",
-            input=f"""
+
 Sensor Data:
 Temperature: {sensor['temperature']} °C
 Humidity: {sensor['humidity']} %
-Soil Moisture: {sensor['soil_moisture']}
-Sunlight: {sensor['sunlight']} lux
+
 
 User: {req.message}
 """
-        )
-        reply = response.output_text
-    except Exception:
-        reply = "AI service temporarily unavailable"
+    )
+    return {"reply": response.output_text, "sensor_data": sensor}
 
-    return {"reply": reply, "sensor_data": sensor}
-
-# ---- Crop Analysis ----
+# ---- Crop Analysis (for frontend) ----
 @app.post("/api/analyze-crop")
 async def analyze_crop(req: CropRequest):
     sensor = simulate_sensor_data()
@@ -110,38 +53,20 @@ async def analyze_crop(req: CropRequest):
     prompt = f"""
 Analyze the crop '{req.plant}' using this sensor data:
 
-Temperature: {sensor['temperature']} °C
-Humidity: {sensor['humidity']} %
-Soil Moisture: {sensor['soil_moisture']}
-Sunlight: {sensor['sunlight']} lux
-
-Provide:
-1. Crop health report
+@@ -104,28 +116,43 @@
 2. Possible diseases
 3. Improvement suggestions
 """
+    response = client.responses.create(
+        model="gpt-4o-mini",
+        input=prompt
+    )
+    return {"sensor_data": sensor, "analysis": response.output_text}
 
-    try:
-        response = client.responses.create(
-            model="gpt-4o-mini",
-            input=prompt
-        )
-        analysis = response.output_text
-    except Exception:
-        analysis = "AI service temporarily unavailable"
-
-    return {"sensor_data": sensor, "analysis": analysis}
-
-# ---- ESP32 Sensor Update (POST + GET + HEAD) ----
-@app.api_route("/api/update-sensor", methods=["POST", "GET", "HEAD"])
-async def update_sensor(request: Request, data: dict = Body(default=None)):
-
-    if request.method in ("GET", "HEAD"):
-        return {"status": "sensor endpoint alive"}
-
-    if data is None:
-        data = await request.json()
-
+# ---- ESP32 Sensor Update ----
+@app.post("/api/update-sensor")
+async def update_sensor(request: Request):
+    data = await request.json()
     if not firebase_enabled:
         return {"status": "firebase_disabled", "data": data}
 
@@ -160,3 +85,7 @@ def test_firebase():
     return ref.get() or {"message": "No data found"}
 
 print("✅ Backend fully loaded")
+
+
+
+
