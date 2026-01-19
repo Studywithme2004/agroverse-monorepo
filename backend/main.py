@@ -136,22 +136,29 @@ Provide:
 2. Possible diseases
 3. Improvement suggestions
 """
+try:
+    response = client.responses.create(
+        model="gpt-4o-mini",
+        input=prompt,
+        max_output_tokens=300
+    )
 
-        response = client.responses.create(
-            model="gpt-4o-mini",
-            input=prompt,
-            max_output_tokens=500
-        )
+    return {
+        "status": "success",
+        "sensor_data": sensor,
+        "analysis": response.output_text
+    }
 
-        return {
-            "sensor_data": sensor,
-            "analysis": response.output_text
-        }
+except Exception as e:
+    print("🔥 ANALYZE-CROP AI ERROR")
+    traceback.print_exc()
 
-    except Exception as e:
-        print("🔥 ANALYZE-CROP ERROR")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "status": "ai_unavailable",
+        "sensor_data": sensor,
+        "analysis": "AI analysis is temporarily unavailable due to usage limits. Please try again later."
+    }
+
 
 # ---- ESP32 Sensor Update ----
 @app.post("/api/update-sensor")
