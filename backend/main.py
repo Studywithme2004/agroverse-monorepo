@@ -62,7 +62,7 @@ try:
     else:
         print("⚠️ FIREBASE_KEY_JSON not found, Firebase disabled")
 
-except Exception as e:
+except Exception:
     print("⚠️ Firebase init failed")
     traceback.print_exc()
 
@@ -90,13 +90,12 @@ def root():
 # ---- AI Chat ----
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
-    try:
-        sensor = simulate_sensor_data()
+    sensor = simulate_sensor_data()
 
+    try:
         response = client.responses.create(
             model="gpt-4o-mini",
             input=f"""
-           
 Sensor Data:
 Temperature: {sensor['temperature']} °C
 Humidity: {sensor['humidity']} %
@@ -104,26 +103,32 @@ Soil Moisture: {sensor['soil_moisture']}
 Sunlight: {sensor['sunlight']} lux
 
 User: {req.message}
-"""
+""",
+            max_output_tokens=250
         )
 
         return {
+            "status": "success",
             "reply": response.output_text,
             "sensor_data": sensor
         }
 
-    except Exception as e:
-        print("🔥 CHAT ERROR")
+    except Exception:
+        print("🔥 CHAT AI ERROR")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+
+        return {
+            "status": "ai_unavailable",
+            "reply": "AI service is temporarily unavailable. Please try again later.",
+            "sensor_data": sensor
+        }
 
 # ---- Crop Analysis ----
 @app.post("/api/analyze-crop")
 async def analyze_crop(req: CropRequest):
-    try:
-        sensor = simulate_sensor_data()
+    sensor = simulate_sensor_data()
 
-        prompt = f"""
+    prompt = f"""
 Analyze the crop '{req.plant}' using this sensor data:
 
 Temperature: {sensor['temperature']} °C
@@ -136,22 +141,29 @@ Provide:
 2. Possible diseases
 3. Improvement suggestions
 """
-   response = client.responses.create(
+
+    try:
+        response = client.responses.create(
             model="gpt-4o-mini",
             input=prompt,
-            max_output_tokens=500
+            max_output_tokens=300
         )
 
         return {
+            "status": "success",
             "sensor_data": sensor,
             "analysis": response.output_text
         }
 
-    except Exception as e:
-        print("🔥 ANALYZE-CROP ERROR")
+    except Exception:
+        print("🔥 ANALYZE-CROP AI ERROR")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
 
+        return {
+            "status": "ai_unavailable",
+            "sensor_data": sensor,
+            "analysis": "AI analysis is temporarily unavailable due to usage limits."
+        }
 
 # ---- ESP32 Sensor Update ----
 @app.post("/api/update-sensor")
@@ -166,10 +178,10 @@ async def update_sensor(request: Request):
         ref.set(data)
         return {"status": "stored", "data": data}
 
-    except Exception as e:
+    except Exception:
         print("🔥 FIREBASE WRITE ERROR")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Firebase write failed")
 
 # ---- Test Firebase ----
 @app.get("/test-firebase")
@@ -181,8 +193,8 @@ def test_firebase():
         ref = db.reference("users/testUser/sensorData")
         return ref.get() or {"message": "No data found"}
 
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
-        return {"error": str(e)}
+        return {"error": "Firebase read failed"}
 
 print("✅ Backend fully loaded")
