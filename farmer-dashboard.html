@@ -128,6 +128,42 @@ updateDashboard();
   
 <script src="crops.js"></script>
 <script src="script1.js"></script>
+    <script>
+async function updateDashboard() {
+    const res = await fetch("https://agroverse-monorepo.onrender.com/api/analyze-crop", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ plant: "Tomato" })
+    });
+
+    const data = await res.json();
+
+    const grid = document.getElementById("cropGrid");
+
+    // 🧠 Inject into crop card UI
+    grid.innerHTML = `
+        <div class="card">
+            <h2>🌱 Tomato</h2>
+            <p><b>Temperature:</b> ${data.sensor_data.temperature} °C</p>
+            <p><b>Humidity:</b> ${data.sensor_data.humidity} %</p>
+            <p><b>Soil Moisture:</b> ${data.sensor_data.soil_moisture}</p>
+            <p><b>Sunlight:</b> ${data.sensor_data.sunlight} lux</p>
+
+            <hr>
+
+            <h3>🤖 AI Report</h3>
+            <p>${data.analysis}</p>
+
+            <a href="crop-report.html?crop=Tomato">
+                <button class="btn primary">View Full Report</button>
+            </a>
+        </div>
+    `;
+}
+
+setInterval(updateDashboard, 10000);
+updateDashboard();
+</script>
 </body>
 
 
