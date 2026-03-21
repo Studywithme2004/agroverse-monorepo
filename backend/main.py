@@ -115,7 +115,7 @@ User: {req.message}
 """
                 }
             ],
-            max_output_tokens=250
+            max_output_tokens=200
         )
 
         # ✅ Safe parsing
@@ -188,7 +188,7 @@ Provide:
                     "content": prompt
                 }
             ],
-            max_output_tokens=300
+            max_output_tokens=200
         )
 
         # ✅ Safe parsing (FIXED)
