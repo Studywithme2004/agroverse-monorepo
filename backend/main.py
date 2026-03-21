@@ -167,30 +167,46 @@ Provide:
 3. Improvement suggestions
 """
 
+   try:
+    response = client.responses.create(
+        model="gpt-4o-mini",
+        input=prompt,
+        max_output_tokens=300
+    )
+
     try:
-        response = client.responses.create(
-            model="gpt-4o-mini",
-            input=prompt,
-            max_output_tokens=300
-        )
+        analysis_text = response.output[0].content[0].text
+    except:
+        analysis_text = "AI parsing failed"
 
-        try:
-            analysis_text = response.output[0].content[0].text
-        except:
-            analysis_text = "AI parsing failed"
+    return {
+        "status": "success",
+        "sensor_data": sensor,
+        "analysis": analysis_text
+    }
 
-        return {
-            "status": "success",
-            "sensor_data": sensor,
-            "analysis": analysis_text
-        }
+except Exception:
+    traceback.print_exc()
 
-    except Exception:
-        traceback.print_exc()
-        return {
-            "status": "ai_error",
-            "sensor_data": sensor
-        }
+    # ✅ FALLBACK (VERY IMPORTANT)
+    return {
+        "status": "fallback",
+        "sensor_data": sensor,
+        "analysis": f"""
+Crop: {req.plant}
+
+Temperature: {sensor.get('temperature')}°C
+Humidity: {sensor.get('humidity')}%
+Soil Moisture: {sensor.get('soil_moisture')}
+Sunlight: {sensor.get('sunlight')}
+
+⚠️ AI unavailable.
+Suggestion:
+- Maintain soil moisture between 40–70%
+- Ensure proper sunlight
+- Monitor temperature regularly
+"""
+    }
 
 # ---- ESP32 Sensor Update ----
 @app.post("/api/update-sensor")
