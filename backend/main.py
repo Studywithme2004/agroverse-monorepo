@@ -181,7 +181,7 @@ Provide:
 
     try:
         response = client.responses.create(
-            model="gpt-4o-mini",
+            model="mistralai/mistral-7b-instruct-v0.1",
             input=[
                 {
                     "role": "user",
