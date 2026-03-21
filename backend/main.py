@@ -100,7 +100,7 @@ async def chat(req: ChatRequest):
 
     try:
         response = client.responses.create(
-            model="stepfun/step-3.5-flash:free",
+            model="openai/gpt-4o-mini-2024-07-18",
             input=[
                 {
                     "role": "user",
@@ -181,7 +181,7 @@ Provide:
 
     try:
         response = client.responses.create(
-            model="stepfun/step-3.5-flash:free",
+            model="openai/gpt-4o-mini-2024-07-18",
             input=[
                 {
                     "role": "user",
