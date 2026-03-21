@@ -21,10 +21,9 @@ if not OPENAI_API_KEY:
 # ---------- FastAPI ----------
 app = FastAPI(title="Agroverse AI Backend")
 
-# TEMP: allow all origins (fix CORS issues)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # change later to your domain
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -57,7 +56,7 @@ try:
         firebase_enabled = True
         print("✅ Firebase initialized")
     else:
-        print("⚠️ FIREBASE_KEY_JSON not found, Firebase disabled")
+        print("⚠️ Firebase not enabled")
 
 except Exception:
     print("⚠️ Firebase init failed")
@@ -70,13 +69,13 @@ class ChatRequest(BaseModel):
 class CropRequest(BaseModel):
     plant: str = "Tomato"
 
-# ---------- Utils ----------
+# ---------- Utils (only fallback) ----------
 def simulate_sensor_data():
     return {
-        "temperature": round(random.uniform(20, 35), 1),
-        "humidity": round(random.uniform(40, 80), 1),
-        "soil_moisture": random.randint(300, 800),
-        "sunlight": random.randint(100, 1000),
+        "temperature": 25,
+        "humidity": 60,
+        "soil_moisture": 500,
+        "sunlight": 700,
     }
 
 # ---------- Routes ----------
@@ -87,28 +86,38 @@ def root():
 # ---- AI Chat ----
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
-    sensor = simulate_sensor_data()
+
+    # Try getting real sensor data
+    sensor = None
+    if firebase_enabled:
+        try:
+            ref = db.reference("users/testUser/sensorData")
+            sensor = ref.get()
+        except:
+            traceback.print_exc()
+
+    if not sensor:
+        sensor = simulate_sensor_data()
 
     try:
         response = client.responses.create(
             model="gpt-4o-mini",
             input=f"""
 Sensor Data:
-Temperature: {sensor['temperature']} °C
-Humidity: {sensor['humidity']} %
-Soil Moisture: {sensor['soil_moisture']}
-Sunlight: {sensor['sunlight']} lux
+Temperature: {sensor.get('temperature')} °C
+Humidity: {sensor.get('humidity')} %
+Soil Moisture: {sensor.get('soil_moisture')}
+Sunlight: {sensor.get('sunlight')} lux
 
 User: {req.message}
 """,
             max_output_tokens=250
         )
 
-        # SAFE parsing
         try:
             reply_text = response.output[0].content[0].text
-        except Exception:
-            reply_text = "AI response parsing failed"
+        except:
+            reply_text = "AI parsing failed"
 
         return {
             "status": "success",
@@ -117,27 +126,40 @@ User: {req.message}
         }
 
     except Exception:
-        print("🔥 CHAT AI ERROR")
         traceback.print_exc()
-
         return {
             "status": "ai_unavailable",
-            "reply": "AI service is temporarily unavailable.",
+            "reply": "AI unavailable",
             "sensor_data": sensor
         }
 
-# ---- Crop Analysis ----
+# ---- Crop Analysis (REAL DATA) ----
 @app.post("/api/analyze-crop")
 async def analyze_crop(req: CropRequest):
-    sensor = simulate_sensor_data()
+
+    sensor = None
+
+    if firebase_enabled:
+        try:
+            ref = db.reference("users/testUser/sensorData")
+            sensor = ref.get()
+        except:
+            traceback.print_exc()
+
+    # If no ESP32 data yet
+    if not sensor:
+        return {
+            "status": "no_data",
+            "message": "No sensor data found. Please send data from ESP32 first."
+        }
 
     prompt = f"""
 Analyze the crop '{req.plant}' using this sensor data:
 
-Temperature: {sensor['temperature']} °C
-Humidity: {sensor['humidity']} %
-Soil Moisture: {sensor['soil_moisture']}
-Sunlight: {sensor['sunlight']} lux
+Temperature: {sensor.get('temperature')} °C
+Humidity: {sensor.get('humidity')} %
+Soil Moisture: {sensor.get('soil_moisture')}
+Sunlight: {sensor.get('sunlight')} lux
 
 Provide:
 1. Crop health report
@@ -152,11 +174,10 @@ Provide:
             max_output_tokens=300
         )
 
-        # SAFE parsing
         try:
             analysis_text = response.output[0].content[0].text
-        except Exception:
-            analysis_text = "AI response parsing failed"
+        except:
+            analysis_text = "AI parsing failed"
 
         return {
             "status": "success",
@@ -165,38 +186,38 @@ Provide:
         }
 
     except Exception:
-        print("🔥 ANALYZE-CROP AI ERROR")
         traceback.print_exc()
-
         return {
-            "status": "ai_unavailable",
-            "sensor_data": sensor,
-            "analysis": "AI temporarily unavailable."
+            "status": "ai_error",
+            "sensor_data": sensor
         }
 
 # ---- ESP32 Sensor Update ----
 @app.post("/api/update-sensor")
 async def update_sensor(request: Request):
 
-    # SAFE JSON parsing
     try:
         data = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid or empty JSON")
+    except:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
 
     if not data:
-        raise HTTPException(status_code=400, detail="No sensor data provided")
+        raise HTTPException(status_code=400, detail="Empty data")
+
+    print("📡 Incoming Sensor:", data)
 
     if not firebase_enabled:
         return {"status": "firebase_disabled", "data": data}
 
     try:
         ref = db.reference("users/testUser/sensorData")
+
+        # 🔥 latest value
         ref.set(data)
+
         return {"status": "stored", "data": data}
 
     except Exception:
-        print("🔥 FIREBASE WRITE ERROR")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Firebase write failed")
 
@@ -209,8 +230,7 @@ def test_firebase():
     try:
         ref = db.reference("users/testUser/sensorData")
         return ref.get() or {"message": "No data found"}
-
-    except Exception:
+    except:
         traceback.print_exc()
         return {"error": "Firebase read failed"}
 
