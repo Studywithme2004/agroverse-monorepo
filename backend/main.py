@@ -68,7 +68,7 @@ class ChatRequest(BaseModel):
 class CropRequest(BaseModel):
     plant: str = "Tomato"
 
-# ---------- Fallback ----------
+# ---------- Fallback Sensor ----------
 def simulate_sensor_data():
     return {
         "temperature": 25,
@@ -77,12 +77,12 @@ def simulate_sensor_data():
         "sunlight": 700,
     }
 
-# ---------- Routes ----------
+# ---------- Root ----------
 @app.get("/")
 def root():
     return {"status": "Agroverse backend running 🚀"}
 
-# ---- AI Chat ----
+# ---------- AI Chat ----------
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
 
@@ -101,7 +101,10 @@ async def chat(req: ChatRequest):
     try:
         response = client.responses.create(
             model="gpt-4o-mini",
-            input=f"""
+            input=[
+                {
+                    "role": "user",
+                    "content": f"""
 Sensor Data:
 Temperature: {sensor.get('temperature')} °C
 Humidity: {sensor.get('humidity')} %
@@ -109,14 +112,23 @@ Soil Moisture: {sensor.get('soil_moisture')}
 Sunlight: {sensor.get('sunlight')} lux
 
 User: {req.message}
-""",
+"""
+                }
+            ],
             max_output_tokens=250
         )
 
-        try:
-            reply_text = response.output[0].content[0].text
-        except:
-            reply_text = "AI parsing failed"
+        # ✅ Safe parsing
+        reply_text = ""
+        if hasattr(response, "output"):
+            for item in response.output:
+                if hasattr(item, "content"):
+                    for c in item.content:
+                        if hasattr(c, "text"):
+                            reply_text += c.text
+
+        if not reply_text.strip():
+            reply_text = "AI response empty"
 
         return {
             "status": "success",
@@ -124,15 +136,17 @@ User: {req.message}
             "sensor_data": sensor
         }
 
-    except Exception:
+    except Exception as e:
+        print("❌ CHAT AI ERROR:", str(e))
         traceback.print_exc()
+
         return {
             "status": "ai_unavailable",
             "reply": "AI unavailable",
             "sensor_data": sensor
         }
 
-# ---- Crop Analysis ----
+# ---------- Crop Analysis ----------
 @app.post("/api/analyze-crop")
 async def analyze_crop(req: CropRequest):
 
@@ -168,14 +182,26 @@ Provide:
     try:
         response = client.responses.create(
             model="gpt-4o-mini",
-            input=prompt,
+            input=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
             max_output_tokens=300
         )
 
-        try:
-            analysis_text = response.output[0].content[0].text
-        except:
-            analysis_text = "AI parsing failed"
+        # ✅ Safe parsing (FIXED)
+        analysis_text = ""
+        if hasattr(response, "output"):
+            for item in response.output:
+                if hasattr(item, "content"):
+                    for c in item.content:
+                        if hasattr(c, "text"):
+                            analysis_text += c.text
+
+        if not analysis_text.strip():
+            analysis_text = "AI response empty"
 
         return {
             "status": "success",
@@ -183,28 +209,31 @@ Provide:
             "analysis": analysis_text
         }
 
-    except Exception:
+    except Exception as e:
+        print("❌ ANALYSIS AI ERROR:", str(e))
         traceback.print_exc()
 
         return {
             "status": "fallback",
             "sensor_data": sensor,
             "analysis": f"""
+⚠️ AI temporarily unavailable
+
 Crop: {req.plant}
 
-Temperature: {sensor.get('temperature')}°C
-Humidity: {sensor.get('humidity')}%
-Soil Moisture: {sensor.get('soil_moisture')}
+Temperature: {sensor.get('temperature')}°C  
+Humidity: {sensor.get('humidity')}%  
+Soil Moisture: {sensor.get('soil_moisture')}  
 Sunlight: {sensor.get('sunlight')}
 
-⚠️ AI unavailable.
-Suggestion:
+Suggestions:
 - Maintain soil moisture between 40–70%
-- Ensure proper sunlight
+- Ensure 6–8 hrs sunlight
+- Monitor crop health regularly
 """
         }
 
-# ---- ESP32 Sensor Update ----
+# ---------- ESP32 Sensor Update ----------
 @app.post("/api/update-sensor")
 async def update_sensor(request: Request):
 
@@ -230,7 +259,7 @@ async def update_sensor(request: Request):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Firebase write failed")
 
-# ---- Test Firebase ----
+# ---------- Test Firebase ----------
 @app.get("/test-firebase")
 def test_firebase():
     if not firebase_enabled:
