@@ -1,6 +1,5 @@
 import os
 import json
-import random
 import traceback
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +22,7 @@ app = FastAPI(title="Agroverse AI Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # change later to your domain
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -69,7 +68,7 @@ class ChatRequest(BaseModel):
 class CropRequest(BaseModel):
     plant: str = "Tomato"
 
-# ---------- Utils (only fallback) ----------
+# ---------- Fallback ----------
 def simulate_sensor_data():
     return {
         "temperature": 25,
@@ -87,8 +86,8 @@ def root():
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
 
-    # Try getting real sensor data
     sensor = None
+
     if firebase_enabled:
         try:
             ref = db.reference("users/testUser/sensorData")
@@ -133,41 +132,8 @@ User: {req.message}
             "sensor_data": sensor
         }
 
-# ---- Crop Analysis (REAL DATA) ----
+# ---- Crop Analysis ----
 @app.post("/api/analyze-crop")
-async def analyze_crop(req: CropRequest):
-
-    sensor = None
-
-    if firebase_enabled:
-        try:
-            ref = db.reference("users/testUser/sensorData")
-            sensor = ref.get()
-        except:
-            traceback.print_exc()
-
-    # If no ESP32 data yet
-    if not sensor:
-        return {
-            "status": "no_data",
-            "message": "No sensor data found. Please send data from ESP32 first."
-        }
-
-    prompt = f"""
-Analyze the crop '{req.plant}' using this sensor data:
-
-Temperature: {sensor.get('temperature')} °C
-Humidity: {sensor.get('humidity')} %
-Soil Moisture: {sensor.get('soil_moisture')}
-Sunlight: {sensor.get('sunlight')} lux
-
-Provide:
-1. Crop health report
-2. Possible diseases
-3. Improvement suggestions
-"""
-
- @app.post("/api/analyze-crop")
 async def analyze_crop(req: CropRequest):
 
     sensor = None
@@ -220,7 +186,6 @@ Provide:
     except Exception:
         traceback.print_exc()
 
-        # ✅ fallback if AI fails
         return {
             "status": "fallback",
             "sensor_data": sensor,
@@ -236,7 +201,6 @@ Sunlight: {sensor.get('sunlight')}
 Suggestion:
 - Maintain soil moisture between 40–70%
 - Ensure proper sunlight
-- Monitor temperature regularly
 """
         }
 
@@ -259,10 +223,7 @@ async def update_sensor(request: Request):
 
     try:
         ref = db.reference("users/testUser/sensorData")
-
-        # 🔥 latest value
         ref.set(data)
-
         return {"status": "stored", "data": data}
 
     except Exception:
