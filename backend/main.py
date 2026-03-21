@@ -100,7 +100,7 @@ async def chat(req: ChatRequest):
 
     try:
         response = client.responses.create(
-            model="mistralai/mistral-7b-instruct-v0.1",
+            model="stepfun/step-3.5-flash:free",
             input=[
                 {
                     "role": "user",
@@ -181,7 +181,7 @@ Provide:
 
     try:
         response = client.responses.create(
-            model="mistralai/mistral-7b-instruct-v0.1",
+            model="stepfun/step-3.5-flash:free",
             input=[
                 {
                     "role": "user",
