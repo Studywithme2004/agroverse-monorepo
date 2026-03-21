@@ -21,13 +21,10 @@ if not OPENAI_API_KEY:
 # ---------- FastAPI ----------
 app = FastAPI(title="Agroverse AI Backend")
 
+# TEMP: allow all origins (fix CORS issues)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://agroverse.great-site.net",
-        "http://localhost:5500",
-        "http://127.0.0.1:5500"
-    ],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -107,9 +104,15 @@ User: {req.message}
             max_output_tokens=250
         )
 
+        # SAFE parsing
+        try:
+            reply_text = response.output[0].content[0].text
+        except Exception:
+            reply_text = "AI response parsing failed"
+
         return {
             "status": "success",
-            "reply": response.output_text,
+            "reply": reply_text,
             "sensor_data": sensor
         }
 
@@ -119,7 +122,7 @@ User: {req.message}
 
         return {
             "status": "ai_unavailable",
-            "reply": "AI service is temporarily unavailable. Please try again later.",
+            "reply": "AI service is temporarily unavailable.",
             "sensor_data": sensor
         }
 
@@ -149,10 +152,16 @@ Provide:
             max_output_tokens=300
         )
 
+        # SAFE parsing
+        try:
+            analysis_text = response.output[0].content[0].text
+        except Exception:
+            analysis_text = "AI response parsing failed"
+
         return {
             "status": "success",
             "sensor_data": sensor,
-            "analysis": response.output_text
+            "analysis": analysis_text
         }
 
     except Exception:
@@ -162,13 +171,21 @@ Provide:
         return {
             "status": "ai_unavailable",
             "sensor_data": sensor,
-            "analysis": "AI analysis is temporarily unavailable due to usage limits."
+            "analysis": "AI temporarily unavailable."
         }
 
 # ---- ESP32 Sensor Update ----
 @app.post("/api/update-sensor")
 async def update_sensor(request: Request):
-    data = await request.json()
+
+    # SAFE JSON parsing
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid or empty JSON")
+
+    if not data:
+        raise HTTPException(status_code=400, detail="No sensor data provided")
 
     if not firebase_enabled:
         return {"status": "firebase_disabled", "data": data}
