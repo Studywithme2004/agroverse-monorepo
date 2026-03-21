@@ -167,32 +167,64 @@ Provide:
 3. Improvement suggestions
 """
 
-   try:
-    response = client.responses.create(
-        model="gpt-4o-mini",
-        input=prompt,
-        max_output_tokens=300
-    )
+ @app.post("/api/analyze-crop")
+async def analyze_crop(req: CropRequest):
+
+    sensor = None
+
+    if firebase_enabled:
+        try:
+            ref = db.reference("users/testUser/sensorData")
+            sensor = ref.get()
+        except:
+            traceback.print_exc()
+
+    if not sensor:
+        return {
+            "status": "no_data",
+            "message": "No sensor data found. Please send data from ESP32 first."
+        }
+
+    prompt = f"""
+Analyze the crop '{req.plant}' using this sensor data:
+
+Temperature: {sensor.get('temperature')} °C
+Humidity: {sensor.get('humidity')} %
+Soil Moisture: {sensor.get('soil_moisture')}
+Sunlight: {sensor.get('sunlight')} lux
+
+Provide:
+1. Crop health report
+2. Possible diseases
+3. Improvement suggestions
+"""
 
     try:
-        analysis_text = response.output[0].content[0].text
-    except:
-        analysis_text = "AI parsing failed"
+        response = client.responses.create(
+            model="gpt-4o-mini",
+            input=prompt,
+            max_output_tokens=300
+        )
 
-    return {
-        "status": "success",
-        "sensor_data": sensor,
-        "analysis": analysis_text
-    }
+        try:
+            analysis_text = response.output[0].content[0].text
+        except:
+            analysis_text = "AI parsing failed"
 
-except Exception:
-    traceback.print_exc()
+        return {
+            "status": "success",
+            "sensor_data": sensor,
+            "analysis": analysis_text
+        }
 
-    # ✅ FALLBACK (VERY IMPORTANT)
-    return {
-        "status": "fallback",
-        "sensor_data": sensor,
-        "analysis": f"""
+    except Exception:
+        traceback.print_exc()
+
+        # ✅ fallback if AI fails
+        return {
+            "status": "fallback",
+            "sensor_data": sensor,
+            "analysis": f"""
 Crop: {req.plant}
 
 Temperature: {sensor.get('temperature')}°C
@@ -206,7 +238,7 @@ Suggestion:
 - Ensure proper sunlight
 - Monitor temperature regularly
 """
-    }
+        }
 
 # ---- ESP32 Sensor Update ----
 @app.post("/api/update-sensor")
