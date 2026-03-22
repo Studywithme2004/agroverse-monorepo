@@ -63,6 +63,10 @@ What to do:
 
 Do NOT explain reasoning. Give only final answer.
 Always follow format strictly. Do not add extra text.
+
+Do not include analysis, explanation, or thinking steps.
+Only return final formatted answer.
+
 """
 
 # ---------- Firebase Setup ----------
