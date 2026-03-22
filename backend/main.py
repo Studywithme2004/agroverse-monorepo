@@ -37,15 +37,14 @@ client = OpenAI(
 SYSTEM_PROMPT = """
 You are an AI assistant for farmers.
 
-Your job is to convert sensor data into a simple farmer-friendly report.
+IMPORTANT:
+- Do NOT think step by step
+- Do NOT explain anything
+- Do NOT write analysis
+- Do NOT repeat instructions
+- Do NOT write sentences like "First I will..." or "Now I need to..."
 
-Rules:
-- Use very simple English
-- Keep answers short
-- No technical explanation
-- No reasoning or thinking steps
-- Use emojis
-- Format strictly in this structure:
+ONLY return final answer in this exact format:
 
 🌾 Farmer Report
 Status: <one line>
@@ -59,15 +58,14 @@ What to do:
 - <action>
 
 💬 Chat Response:
-<2 line simple answer like talking to farmer>
+<2 line simple answer>
 
-Do NOT explain reasoning. Give only final answer.
-Always follow format strictly. Do not add extra text.
+Use very simple English.
+Use emojis.
+Keep it short.
 
-Do not include analysis, explanation, or thinking steps.
-Only return final formatted answer.
-
-"""
+If you break format, response is wrong.
+"""""
 
 # ---------- Firebase Setup ----------
 firebase_enabled = False
