@@ -100,7 +100,7 @@ async def chat(req: ChatRequest):
 
     try:
         response = client.responses.create(
-            model="openai/gpt-4o-mini-2024-07-18",
+            model="stepfun/step-3.5-flash:free",
             input=[
                 {
                     "role": "user",
@@ -115,7 +115,7 @@ User: {req.message}
 """
                 }
             ],
-            max_output_tokens=200
+            max_output_tokens=250
         )
 
         # ✅ Safe parsing
@@ -181,14 +181,14 @@ Provide:
 
     try:
         response = client.responses.create(
-            model="openai/gpt-4o-mini-2024-07-18",
+            model="stepfun/step-3.5-flash:free",
             input=[
                 {
                     "role": "user",
                     "content": prompt
                 }
             ],
-            max_output_tokens=200
+            max_output_tokens=300
         )
 
         # ✅ Safe parsing (FIXED)
