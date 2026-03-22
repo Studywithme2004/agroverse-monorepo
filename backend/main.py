@@ -33,6 +33,38 @@ client = OpenAI(
     base_url=OPENAI_BASE_URL
 )
 
+# ---------- SYSTEM PROMPT ----------
+SYSTEM_PROMPT = """
+You are an AI assistant for farmers.
+
+Your job is to convert sensor data into a simple farmer-friendly report.
+
+Rules:
+- Use very simple English
+- Keep answers short
+- No technical explanation
+- No reasoning or thinking steps
+- Use emojis
+- Format strictly in this structure:
+
+🌾 Farmer Report
+Status: <one line>
+
+Problem:
+- <point>
+- <point>
+
+What to do:
+- <action>
+- <action>
+
+💬 Chat Response:
+<2 line simple answer like talking to farmer>
+
+Do NOT explain reasoning. Give only final answer.
+Always follow format strictly. Do not add extra text.
+"""
+
 # ---------- Firebase Setup ----------
 firebase_enabled = False
 db = None
@@ -103,6 +135,10 @@ async def chat(req: ChatRequest):
             model="stepfun/step-3.5-flash:free",
             input=[
                 {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT
+                },
+                {
                     "role": "user",
                     "content": f"""
 Sensor Data:
@@ -118,7 +154,6 @@ User: {req.message}
             max_output_tokens=250
         )
 
-        # ✅ Safe parsing
         reply_text = ""
         if hasattr(response, "output"):
             for item in response.output:
@@ -165,33 +200,29 @@ async def analyze_crop(req: CropRequest):
             "message": "No sensor data found. Please send data from ESP32 first."
         }
 
-    prompt = f"""
-Analyze the crop '{req.plant}' using this sensor data:
-
-Temperature: {sensor.get('temperature')} °C
-Humidity: {sensor.get('humidity')} %
-Soil Moisture: {sensor.get('soil_moisture')}
-Sunlight: {sensor.get('sunlight')} lux
-
-Provide:
-1. Crop health report
-2. Possible diseases
-3. Improvement suggestions
-"""
-
     try:
         response = client.responses.create(
             model="stepfun/step-3.5-flash:free",
             input=[
                 {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT
+                },
+                {
                     "role": "user",
-                    "content": prompt
+                    "content": f"""
+Sensor Data:
+Temperature: {sensor.get('temperature')} °C
+Humidity: {sensor.get('humidity')} %
+Soil Moisture: {sensor.get('soil_moisture')}
+Sunlight: {sensor.get('sunlight')} lux
+Crop: {req.plant}
+"""
                 }
             ],
             max_output_tokens=300
         )
 
-        # ✅ Safe parsing (FIXED)
         analysis_text = ""
         if hasattr(response, "output"):
             for item in response.output:
@@ -216,21 +247,7 @@ Provide:
         return {
             "status": "fallback",
             "sensor_data": sensor,
-            "analysis": f"""
-⚠️ AI temporarily unavailable
-
-Crop: {req.plant}
-
-Temperature: {sensor.get('temperature')}°C  
-Humidity: {sensor.get('humidity')}%  
-Soil Moisture: {sensor.get('soil_moisture')}  
-Sunlight: {sensor.get('sunlight')}
-
-Suggestions:
-- Maintain soil moisture between 40–70%
-- Ensure 6–8 hrs sunlight
-- Monitor crop health regularly
-"""
+            "analysis": "⚠️ AI unavailable"
         }
 
 # ---------- ESP32 Sensor Update ----------
