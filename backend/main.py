@@ -1,8 +1,11 @@
 import os
 import json
 import traceback
+import base64
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -27,12 +30,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 👉 ADD THIS (for image access)
+app.mount("/images", StaticFiles(directory="."), name="images")
+
 # ---------- OpenAI Client ----------
 client = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=OPENAI_BASE_URL
 )
-
 
 # ---------- Firebase Setup ----------
 firebase_enabled = False
@@ -69,6 +74,10 @@ class ChatRequest(BaseModel):
 class CropRequest(BaseModel):
     plant: str = "Tomato"
 
+# 👉 NEW MODEL FOR IMAGE
+class ImageData(BaseModel):
+    image: str
+
 # ---------- Fallback Sensor ----------
 def simulate_sensor_data():
     return {
@@ -82,6 +91,22 @@ def simulate_sensor_data():
 @app.get("/")
 def root():
     return {"status": "Agroverse backend running 🚀"}
+
+# ---------- 📸 IMAGE UPLOAD API (NEW) ----------
+@app.post("/api/upload-image")
+async def upload_image(data: ImageData):
+    try:
+        img_data = data.image.split(",")[1]
+
+        with open("latest.jpg", "wb") as f:
+            f.write(base64.b64decode(img_data))
+
+        return {"status": "success", "message": "Image saved"}
+
+    except Exception as e:
+        print("❌ IMAGE ERROR:", str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Image upload failed")
 
 # ---------- AI Chat ----------
 @app.post("/api/chat")
@@ -103,10 +128,7 @@ async def chat(req: ChatRequest):
         response = client.responses.create(
             model="stepfun/step-3.5-flash:free",
             input=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT
-                },
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
                     "content": f"""
@@ -131,12 +153,9 @@ User: {req.message}
                         if hasattr(c, "text"):
                             reply_text += c.text
 
-        if not reply_text.strip():
-            reply_text = "AI response empty"
-
         return {
             "status": "success",
-            "reply": reply_text,
+            "reply": reply_text or "AI response empty",
             "sensor_data": sensor
         }
 
@@ -166,17 +185,14 @@ async def analyze_crop(req: CropRequest):
     if not sensor:
         return {
             "status": "no_data",
-            "message": "No sensor data found. Please send data from ESP32 first."
+            "message": "No sensor data found"
         }
 
     try:
         response = client.responses.create(
             model="stepfun/step-3.5-flash:free",
             input=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT
-                },
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
                     "content": f"""
@@ -200,13 +216,10 @@ Crop: {req.plant}
                         if hasattr(c, "text"):
                             analysis_text += c.text
 
-        if not analysis_text.strip():
-            analysis_text = "AI response empty"
-
         return {
             "status": "success",
             "sensor_data": sensor,
-            "analysis": analysis_text
+            "analysis": analysis_text or "AI response empty"
         }
 
     except Exception as e:
@@ -227,9 +240,6 @@ async def update_sensor(request: Request):
         data = await request.json()
     except:
         raise HTTPException(status_code=400, detail="Invalid JSON")
-
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty data")
 
     print("📡 Incoming Sensor:", data)
 
