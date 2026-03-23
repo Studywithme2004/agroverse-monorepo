@@ -269,3 +269,57 @@ def test_firebase():
         return {"error": "Firebase read failed"}
 
 print("✅ Backend fully loaded")
+
+# ----------time history-------------
+# main.py
+
+from fastapi import FastAPI, UploadFile, File, Form
+from datetime import datetime
+import os
+import json
+
+app = FastAPI()
+
+DATA_FILE = "history.json"
+IMAGE_FOLDER = "images"
+
+os.makedirs(IMAGE_FOLDER, exist_ok=True)
+
+@app.post("/api/upload-data")
+async def upload_data(
+    temperature: float = Form(...),
+    humidity: float = Form(...),
+    soil: float = Form(...),
+    sunlight: float = Form(...),
+    image: UploadFile = File(...)
+):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    image_path = f"{IMAGE_FOLDER}/{timestamp}.jpg"
+
+    # Save image
+    with open(image_path, "wb") as f:
+        f.write(await image.read())
+
+    record = {
+        "time": timestamp,
+        "temperature": temperature,
+        "humidity": humidity,
+        "soil": soil,
+        "sunlight": sunlight,
+        "image": image_path
+    }
+
+    # Save JSON
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            data = json.load(f)
+    else:
+        data = []
+
+    data.append(record)
+
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f)
+
+    return {"message": "Saved"}
