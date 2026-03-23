@@ -4,7 +4,7 @@ import traceback
 import base64
 from datetime import datetime
 
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -24,15 +24,16 @@ app = FastAPI(title="Agroverse AI Backend")
 # ✅ CORS FIX
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # change later for security
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Serve images folder
+# ---------- IMAGE FOLDER ----------
 IMAGE_FOLDER = "images"
 os.makedirs(IMAGE_FOLDER, exist_ok=True)
+
 app.mount("/images", StaticFiles(directory=IMAGE_FOLDER), name="images")
 
 # ---------- OpenAI ----------
@@ -199,53 +200,15 @@ async def update_sensor(request: Request):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Firebase error")
 
-# ---------- HISTORY (IMAGE + SENSOR) ----------
+# ---------- HISTORY (JSON + IMAGE SUPPORT) ----------
 DATA_FILE = "history.json"
 
 @app.post("/api/upload-data")
-async def upload_data(
-    temperature: float = Form(...),
-    humidity: float = Form(...),
-    soil: float = Form(...),
-    sunlight: float = Form(...),
-    image: UploadFile = File(...)
-):
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    image_path = f"{IMAGE_FOLDER}/{timestamp}.jpg"
-
-    with open(image_path, "wb") as f:
-        f.write(await image.read())
-
-    record = {
-        "time": timestamp,
-        "temperature": temperature,
-        "humidity": humidity,
-        "soil": soil,
-        "sunlight": sunlight,
-        "image": image_path
-    }
-
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            data = json.load(f)
-    else:
-        data = []
-
-    data.append(record)
-
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f)
-
-    return {"status": "saved"}
-
-@app.post("/api/upload-data")
 async def upload_data(request: Request):
-
     try:
-        content_type = request.headers.get("content-type")
+        content_type = request.headers.get("content-type", "")
 
-        # ---------- JSON (ESP32 easy) ----------
+        # ---------- JSON (ESP32) ----------
         if "application/json" in content_type:
             data = await request.json()
 
@@ -268,6 +231,7 @@ async def upload_data(request: Request):
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             image_path = f"{IMAGE_FOLDER}/{timestamp}.jpg"
 
+            # save history image
             with open(image_path, "wb") as f:
                 f.write(content)
 
@@ -304,5 +268,13 @@ async def upload_data(request: Request):
         print("❌ ERROR:", str(e))
         traceback.print_exc()
         return {"status": "error"}
+
+# ---------- GET HISTORY ----------
+@app.get("/api/history")
+def get_history():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    return []
 
 print("✅ Backend fully loaded")
