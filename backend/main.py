@@ -2,27 +2,14 @@ import os
 import json
 import traceback
 import base64
+from datetime import datetime
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from openai import OpenAI
-
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # ---------- Load ENV ----------
 load_dotenv()
@@ -31,29 +18,30 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 FIREBASE_KEY_JSON = os.getenv("FIREBASE_KEY_JSON")
 
-if not OPENAI_API_KEY:
-    print("❌ OPENAI_API_KEY is missing")
-
 # ---------- FastAPI ----------
 app = FastAPI(title="Agroverse AI Backend")
 
+# ✅ CORS FIX
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # change later for security
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 👉 ADD THIS (for image access)
-app.mount("/images", StaticFiles(directory="."), name="images")
+# ✅ Serve images folder
+IMAGE_FOLDER = "images"
+os.makedirs(IMAGE_FOLDER, exist_ok=True)
+app.mount("/images", StaticFiles(directory=IMAGE_FOLDER), name="images")
 
-# ---------- OpenAI Client ----------
+# ---------- OpenAI ----------
 client = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url=OPENAI_BASE_URL
 )
 
-# ---------- Firebase Setup ----------
+# ---------- Firebase ----------
 firebase_enabled = False
 db = None
 
@@ -74,6 +62,7 @@ try:
         db = firebase_db
         firebase_enabled = True
         print("✅ Firebase initialized")
+
     else:
         print("⚠️ Firebase not enabled")
 
@@ -88,7 +77,6 @@ class ChatRequest(BaseModel):
 class CropRequest(BaseModel):
     plant: str = "Tomato"
 
-# 👉 NEW MODEL FOR IMAGE
 class ImageData(BaseModel):
     image: str
 
@@ -106,23 +94,25 @@ def simulate_sensor_data():
 def root():
     return {"status": "Agroverse backend running 🚀"}
 
-# ---------- 📸 IMAGE UPLOAD API (NEW) ----------
+# ---------- IMAGE UPLOAD ----------
 @app.post("/api/upload-image")
 async def upload_image(data: ImageData):
     try:
         img_data = data.image.split(",")[1]
 
-        with open("latest.jpg", "wb") as f:
+        with open(f"{IMAGE_FOLDER}/latest.jpg", "wb") as f:
             f.write(base64.b64decode(img_data))
 
-        return {"status": "success", "message": "Image saved"}
+        return {"status": "success"}
 
     except Exception as e:
         print("❌ IMAGE ERROR:", str(e))
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Image upload failed")
 
-# ---------- AI Chat ----------
+# ---------- AI CHAT ----------
+SYSTEM_PROMPT = "You are Agro AI. Give simple farmer-friendly answers."
+
 @app.post("/api/chat")
 async def chat(req: ChatRequest):
 
@@ -141,49 +131,18 @@ async def chat(req: ChatRequest):
     try:
         response = client.responses.create(
             model="stepfun/step-3.5-flash:free",
-            input=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"""
-Sensor Data:
-Temperature: {sensor.get('temperature')} °C
-Humidity: {sensor.get('humidity')} %
-Soil Moisture: {sensor.get('soil_moisture')}
-Sunlight: {sensor.get('sunlight')} lux
-
-User: {req.message}
-"""
-                }
-            ],
-            max_output_tokens=250
+            input=f"Sensor: {sensor}\nUser: {req.message}",
+            max_output_tokens=200
         )
 
-        reply_text = ""
-        if hasattr(response, "output"):
-            for item in response.output:
-                if hasattr(item, "content"):
-                    for c in item.content:
-                        if hasattr(c, "text"):
-                            reply_text += c.text
+        reply = response.output_text if hasattr(response, "output_text") else "No response"
 
-        return {
-            "status": "success",
-            "reply": reply_text or "AI response empty",
-            "sensor_data": sensor
-        }
+        return {"reply": reply, "sensor_data": sensor}
 
-    except Exception as e:
-        print("❌ CHAT AI ERROR:", str(e))
-        traceback.print_exc()
+    except:
+        return {"reply": "AI unavailable", "sensor_data": sensor}
 
-        return {
-            "status": "ai_unavailable",
-            "reply": "AI unavailable",
-            "sensor_data": sensor
-        }
-
-# ---------- Crop Analysis ----------
+# ---------- CROP ANALYSIS ----------
 @app.post("/api/analyze-crop")
 async def analyze_crop(req: CropRequest):
 
@@ -197,56 +156,29 @@ async def analyze_crop(req: CropRequest):
             traceback.print_exc()
 
     if not sensor:
-        return {
-            "status": "no_data",
-            "message": "No sensor data found"
-        }
+        return {"status": "no_data"}
 
     try:
         response = client.responses.create(
             model="stepfun/step-3.5-flash:free",
-            input=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"""
-Sensor Data:
-Temperature: {sensor.get('temperature')} °C
-Humidity: {sensor.get('humidity')} %
-Soil Moisture: {sensor.get('soil_moisture')}
-Sunlight: {sensor.get('sunlight')} lux
-Crop: {req.plant}
-"""
-                }
-            ],
-            max_output_tokens=300
+            input=f"Crop: {req.plant}\nSensor: {sensor}",
+            max_output_tokens=250
         )
 
-        analysis_text = ""
-        if hasattr(response, "output"):
-            for item in response.output:
-                if hasattr(item, "content"):
-                    for c in item.content:
-                        if hasattr(c, "text"):
-                            analysis_text += c.text
+        analysis = response.output_text if hasattr(response, "output_text") else "No analysis"
 
         return {
-            "status": "success",
             "sensor_data": sensor,
-            "analysis": analysis_text or "AI response empty"
+            "analysis": analysis
         }
 
-    except Exception as e:
-        print("❌ ANALYSIS AI ERROR:", str(e))
-        traceback.print_exc()
-
+    except:
         return {
-            "status": "fallback",
             "sensor_data": sensor,
-            "analysis": "⚠️ AI unavailable"
+            "analysis": "AI unavailable"
         }
 
-# ---------- ESP32 Sensor Update ----------
+# ---------- SENSOR UPDATE ----------
 @app.post("/api/update-sensor")
 async def update_sensor(request: Request):
 
@@ -255,49 +187,20 @@ async def update_sensor(request: Request):
     except:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
-    print("📡 Incoming Sensor:", data)
-
     if not firebase_enabled:
-        return {"status": "firebase_disabled", "data": data}
+        return {"status": "no_firebase", "data": data}
 
     try:
         ref = db.reference("users/testUser/sensorData")
         ref.set(data)
-        return {"status": "stored", "data": data}
+        return {"status": "stored"}
 
-    except Exception:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Firebase write failed")
-
-# ---------- Test Firebase ----------
-@app.get("/test-firebase")
-def test_firebase():
-    if not firebase_enabled:
-        return {"error": "Firebase not enabled"}
-
-    try:
-        ref = db.reference("users/testUser/sensorData")
-        return ref.get() or {"message": "No data found"}
     except:
         traceback.print_exc()
-        return {"error": "Firebase read failed"}
+        raise HTTPException(status_code=500, detail="Firebase error")
 
-print("✅ Backend fully loaded")
-
-# ----------time history-------------
-# main.py
-
-from fastapi import FastAPI, UploadFile, File, Form
-from datetime import datetime
-import os
-import json
-
-app = FastAPI()
-
+# ---------- HISTORY (IMAGE + SENSOR) ----------
 DATA_FILE = "history.json"
-IMAGE_FOLDER = "images"
-
-os.makedirs(IMAGE_FOLDER, exist_ok=True)
 
 @app.post("/api/upload-data")
 async def upload_data(
@@ -311,7 +214,6 @@ async def upload_data(
 
     image_path = f"{IMAGE_FOLDER}/{timestamp}.jpg"
 
-    # Save image
     with open(image_path, "wb") as f:
         f.write(await image.read())
 
@@ -324,7 +226,6 @@ async def upload_data(
         "image": image_path
     }
 
-    # Save JSON
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r") as f:
             data = json.load(f)
@@ -336,9 +237,8 @@ async def upload_data(
     with open(DATA_FILE, "w") as f:
         json.dump(data, f)
 
-    return {"message": "Saved"}
+    return {"status": "saved"}
 
-#-------timeapi-----
 @app.get("/api/history")
 def get_history():
     if os.path.exists(DATA_FILE):
@@ -346,18 +246,4 @@ def get_history():
             return json.load(f)
     return []
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+print("✅ Backend fully loaded")
