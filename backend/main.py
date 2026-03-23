@@ -204,6 +204,7 @@ async def update_sensor(request: Request):
 DATA_FILE = "history.json"
 
 @app.post("/api/upload-data")
+print("🔥 API HIT")
 async def upload_data(request: Request):
     try:
         content_type = request.headers.get("content-type", "")
