@@ -205,6 +205,8 @@ DATA_FILE = "history.json"
 
 @app.post("/api/upload-data")
 print("🔥 API HIT")
+print("📦 Headers:", request.headers)
+print("📦 Body:", await request.body())
 async def upload_data(request: Request):
     try:
         content_type = request.headers.get("content-type", "")
