@@ -323,3 +323,27 @@ async def upload_data(
         json.dump(data, f)
 
     return {"message": "Saved"}
+
+#-------timeapi-----
+@app.get("/api/history")
+def get_history():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
