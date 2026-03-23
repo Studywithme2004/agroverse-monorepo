@@ -239,11 +239,70 @@ async def upload_data(
 
     return {"status": "saved"}
 
-@app.get("/api/history")
-def get_history():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            return json.load(f)
-    return []
+@app.post("/api/upload-data")
+async def upload_data(request: Request):
+
+    try:
+        content_type = request.headers.get("content-type")
+
+        # ---------- JSON (ESP32 easy) ----------
+        if "application/json" in content_type:
+            data = await request.json()
+
+            record = {
+                "time": datetime.now().strftime("%Y%m%d_%H%M%S"),
+                "temperature": data.get("temperature"),
+                "humidity": data.get("humidity"),
+                "soil": data.get("soil"),
+                "sunlight": data.get("sunlight"),
+                "image": "images/latest.jpg"
+            }
+
+        # ---------- FORM (image upload) ----------
+        else:
+            form = await request.form()
+
+            image: UploadFile = form["image"]
+            content = await image.read()
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            image_path = f"{IMAGE_FOLDER}/{timestamp}.jpg"
+
+            with open(image_path, "wb") as f:
+                f.write(content)
+
+            # save latest image
+            with open(f"{IMAGE_FOLDER}/latest.jpg", "wb") as f:
+                f.write(content)
+
+            record = {
+                "time": timestamp,
+                "temperature": float(form["temperature"]),
+                "humidity": float(form["humidity"]),
+                "soil": float(form["soil"]),
+                "sunlight": float(form["sunlight"]),
+                "image": image_path
+            }
+
+        # ---------- SAVE ----------
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "r") as f:
+                history = json.load(f)
+        else:
+            history = []
+
+        history.append(record)
+
+        with open(DATA_FILE, "w") as f:
+            json.dump(history, f)
+
+        print("✅ Saved:", record)
+
+        return {"status": "saved"}
+
+    except Exception as e:
+        print("❌ ERROR:", str(e))
+        traceback.print_exc()
+        return {"status": "error"}
 
 print("✅ Backend fully loaded")
