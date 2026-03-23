@@ -204,11 +204,17 @@ async def update_sensor(request: Request):
 DATA_FILE = "history.json"
 
 @app.post("/api/upload-data")
-print("📦 Headers:", request.headers)
-print("📦 Body:", await request.body())
+
 async def upload_data(request: Request):
+   
     try:
+        print("🔥 API HIT")
+
         content_type = request.headers.get("content-type", "")
+        print("📦 Headers:", request.headers)
+
+        body = await request.body()
+        print("📦 Body:", body)
 
         # ---------- JSON (ESP32) ----------
         if "application/json" in content_type:
