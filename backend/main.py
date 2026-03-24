@@ -131,7 +131,7 @@ async def chat(req: ChatRequest):
 
     try:
         response = client.responses.create(
-            model="stepfun/step-3.5-flash:free",
+            model="openai/gpt-4o-mini",
             input=f"Sensor: {sensor}\nUser: {req.message}",
             max_output_tokens=200
         )
@@ -161,7 +161,7 @@ async def analyze_crop(req: CropRequest):
 
     try:
         response = client.responses.create(
-            model="stepfun/step-3.5-flash:free",
+            model="openai/gpt-4o-mini",
             input=f"Crop: {req.plant}\nSensor: {sensor}",
             max_output_tokens=250
         )
